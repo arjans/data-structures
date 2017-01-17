@@ -1,0 +1,1 @@
+My 'remove_min_tree' looks different from Okasaki's. Why?

@@ -62,6 +62,16 @@ class LeftistHeap
 		end
 	end
 
+	def merge(h)
+		if h.class == EmptyNode
+			self
+		elsif @value < h.value
+			LeftistHeap.new(@value, @left, @right.merge(h))
+		else
+			LeftistHeap.new(h.value, h.left, self.merge(h.right))
+		end
+	end
+
 	def insert(v)
 		LeftistHeap.new(v, EmptyNode.new, EmptyNode.new).merge(self)
 	end
