@@ -3,12 +3,15 @@
 #
 
 #
-# Linked lists are useful in immutable binomial heaps.
-# The heap is basically a list of binomial trees.
-# If it were an array, each change in the heap would copy the entire array.
-# With lists, if the `rest` of the list is unchanged, it'll be shared.
+# Basic list implementation.
 #
-class LinkedList
+# Usage:
+# 	List.new(1)
+# 	# => List[1, nil]
+# 	List.new(2, List.new(1))
+# 	# => List[2, List[1, nil]]
+#
+class List
 	attr_accessor :first, :rest
 
 	def initialize(first, rest = nil)
@@ -16,16 +19,36 @@ class LinkedList
 		@rest = rest
 	end
 
+	def reverse
+		helper = -> l, result {
+			l.nil? ? result :	helper.(l.rest, List.new(l.first, result))
+		}
+		helper.(self, nil)
+	end
+
 	def inspect
-		"[#{@first.inspect}, #{@rest.inspect}]"
+		"List[#{@first.inspect}, #{@rest.inspect}]"
 	end
 end
 
 #
-# Only binomial trees of equal rank can be merged together.
+# Binomial tree
+#
+# Usage:
+# 	Create binomial tree of rank 0 (just one element)
+#
+# 	t = BinomialTree.new(0, 1, nil)
+# 	# => Tree[1, nil]
+#
+# 	Link two binomial trees together
+#
+# 	t.link(BinomialTree.new(0, 2, nil))
+# 	# => Tree[1, List[Tree[2, nil], nil]]
 #
 class BinomialTree
 	attr_accessor :rank, :value, :children
+
+	alias root value
 
 	def initialize(rank, value, children)
 		@rank = rank
@@ -33,25 +56,40 @@ class BinomialTree
 		@children = children
 	end
 
-	def merge(t)
+	#
+	# Only binomial trees of equal rank can be linked together.
+	#
+	def link(t)
 		raise "Trees are of unequal rank." if @rank != t.rank
 
 		if @value < t.value
-			BinomialTree.new(@rank + 1, @value, [t] + @children)
+			BinomialTree.new(@rank + 1, @value, List.new(t, @children))
 		else
-			BinomialTree.new(@rank + 1, t.value, [self] + t.children)
+			BinomialTree.new(@rank + 1, t.value, List.new(self, t.children))
 		end
 	end
 
 	def inspect
-		if @children.empty?
-			@value
-		else
-			"Tree[#{@value.inspect}, #{@children.map(&:inspect)}]"
-		end
+		"Tree[#{@value.inspect}, #{@children.inspect}]"
 	end
 end
 
+#
+# Binomial heap
+#
+# Same api as most heaps: is_empty?, insert, find_min, delete_min, merge
+#
+# Usage:
+# 	Create an empty heap:
+#
+# 	BinomialHeap.new
+# 	# => Heap[nil]
+#
+# 	Initialize from array:
+#
+# 	h = [1,5,2,3,7,9].inject(BinomialHeap.new) { |h,n| h.insert(n) }
+# 	# => Heap[List[Tree[2, nil], List[Tree[1, List[Tree[5, nil], nil]], nil]]]
+#
 class BinomialHeap
 	attr_accessor :list
 
@@ -59,43 +97,81 @@ class BinomialHeap
 		@list = list
 	end
 
+	def is_empty?
+		@list.nil?
+	end
+
 	def insert(v)
-		BinomialHeap.new(insert_tree(BinomialTree.new(0, v, []), @list))
+		BinomialHeap.new(insert_tree(BinomialTree.new(0, v, nil), @list))
 	end
 
 	#
 	# Returns minimum element in heap without removing it.
 	#
-	def peek
+	def find_min
 		raise "Empty heap" if @list.nil?
-
-		helper = -> l, result {
-			if l.nil?
-				result
-			elsif l.first.nil?
-				helper.call(l.rest, result)
-			elsif result.nil? || l.first.value < result
-				helper.call(l.rest, l.first.value)
-			else
-				helper.call(l.rest, result)
-			end
-		}
-		helper.call(@list, nil)
+		remove_min_tree.first.root
 	end
 
 	#
-	# Returns the heap resulting from removing the minimum element.
+	# Merge two binomial heaps.
 	#
-	def pop
+	def merge(h)
+		BinomialHeap.new(merge_lists(@list, h.list))
+	end
+
+	#
+	# Returns a new heap with the minimum element removed.
+	#
+	def delete_min
 		raise "Empty heap" if @list.nil?
 
 		t, ts = remove_min_tree
-		BinomialHeap.new(t.children.
-											 reverse.
-											 inject(ts) { |ts, c| insert_tree(c, ts) })
+		if t.children.nil?
+			BinomialHeap.new(ts)
+		else
+			BinomialHeap.new(merge_lists(ts, t.children.reverse))
+		end
 	end
 
-	# private
+	def inspect
+		"Heap[#{@list.inspect}]"
+	end
+
+	private
+
+		#
+		# Returns a new list with the tree inserted in its proper order.
+		# If there was already a tree of the same rank, the two are linked together
+		# and inserted into the rest of the list.
+		#
+		def insert_tree(t, l)
+			if l.nil?
+				List.new(t, l)
+			elsif t.rank < l.first.rank
+				List.new(t, l)
+			else
+				insert_tree(l.first.link(t), l.rest)
+			end
+		end
+
+		#
+		# Merge two lists of binomial trees.
+		# Returns a new list.
+		#
+		def merge_lists(ts1, ts2)
+			if ts1.nil?
+				ts2
+			elsif ts2.nil?
+				ts1
+			elsif ts1.first.rank < ts2.first.rank
+				List.new(ts1.first, merge_lists(ts1.rest, ts2))
+			elsif ts2.first.rank < ts1.first.rank
+				List.new(ts2.first, merge_lists(ts1, ts2.rest))
+			else
+				insert_tree(ts1.first.link(ts2.first), merge_lists(ts1.rest, ts2.rest))
+			end
+		end
 
 		#
 		# Returns a tuple containing the min tree
@@ -104,65 +180,18 @@ class BinomialHeap
 		def remove_min_tree
 			raise "Empty heap" if @list.nil?
 
-			min_elem = peek
 			helper = -> l {
-				if l.nil?
-					[nil, l]
+				if l.rest.nil?
+					[l.first, l.rest]
 				else
 					t, ts = helper.(l.rest)
-					if t.nil? && l.first && l.first.value == min_elem
-						[l.first, LinkedList.new(nil, l.rest)]
+					if l.first.root < t.root
+						[l.first, l.rest]
 					else
-						[t, LinkedList.new(l.first, ts)]
+						[t, List.new(l.first, ts)]
 					end
 				end
 			}
 			helper.(@list)
-		end
-
-		# def remove_min_tree
-		# 	raise "Empty heap" if @list.nil?
-
-		# 	helper = -> l {
-		# 		if l.rest.nil?
-		# 			[l.first, l.rest]
-		# 		else
-		# 			t, ts = helper.(l.rest)
-		# 			if l.first && l.first.value < t.value
-		# 				[l.first, LinkedList.new(t, l.rest)]
-		# 			else
-		# 				[t, l]
-		# 			end
-		# 		end
-		# 	}
-		# 	helper.call(@list)
-		# end
-
-		#
-		# Returns a new linked list containing the inserted tree.
-		#
-		# CHANGE TO MERGING TWO HEAPS (Reversed list of a tree's children looks like a heap.)
-		#
-		def insert_tree(tree, list)
-			helper = -> t, l, count {
-				if l.nil?
-					LinkedList.new(t, l)
-				elsif count != t.rank
-					LinkedList.new(l.first, helper.(t, l.rest, count + 1))
-				elsif l.first
-					LinkedList.new(nil, helper.(l.first.merge(t), l.rest, count + 1))
-				else
-					LinkedList.new(t, l.rest)
-				end
-			}
-			helper.(tree, list, 0)
-		end
-
-		def compare(x,y)
-			if @f.class == Proc
-				@f.call(x,y)
-			else
-				x.method(@f).call(y)
-			end
 		end
 end
