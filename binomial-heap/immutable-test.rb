@@ -9,10 +9,10 @@ h = shuffled_vals.inject(h) { |h,n| h.insert(n) }
 
 puts "ORDERED ACCESS:"
 result = ordered_vals.all? do |v|
-	puts "v: #{v}"
-	min = h.find_min
-	puts "min: #{min}"
-	h = h.delete_min
-	v == min ? true : (raise "Unexpected min value.")
+  puts "v: #{v}"
+  min = h.find_min
+  puts "min: #{min}"
+  h = h.delete_min
+  v == min ? true : (raise "Unexpected min value.")
 end
 puts result
